@@ -41,6 +41,8 @@ import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * The Web Service Engine
@@ -62,12 +64,14 @@ final public class WSClient {
     private String soapAction = null;
     private int connectTimeout = 0;
     private int readTimeout = 0;
+    private static Logger log = Logger.getLogger(WSClient.class.getName());
 
     public WSClient(String serverUrl) throws MalformedURLException {
         this(serverUrl, true);
     }
 
     public WSClient(String serverUrl, boolean ignoreCert) throws MalformedURLException {
+        log.log(Level.FINEST, String.format("Setting up wsclient to %s ignoreSsl: %s", serverUrl, ignoreCert));
         if (serverUrl.endsWith("/")) {
             serverUrl = serverUrl.substring(0, serverUrl.length() - 1);
         }
@@ -84,7 +88,7 @@ final public class WSClient {
                         }
                     );
             }
-            catch (Exception e) {
+            catch (Exception ignored) {
             }
         }
     }
@@ -100,6 +104,7 @@ final public class WSClient {
     }
 
     public Object invoke(String methodName, Argument[] paras, String returnType) throws RemoteException {
+        log.log(Level.FINEST, String.format("Invoking %s", methodName));
         String soapMsg = XmlGen.toXML(methodName, paras, this.vimNameSpace);
 
         InputStream is = null;
@@ -108,6 +113,7 @@ final public class WSClient {
             return xmlGen.fromXML(returnType, is);
         }
         catch (Exception e1) {
+            log.log(Level.SEVERE, "VI SDK invoke exception caught.", e1);
             throw new RemoteException("VI SDK invoke exception:" + e1);
         }
         finally {
@@ -115,7 +121,7 @@ final public class WSClient {
                 try {
                     is.close();
                 }
-                catch (IOException ioe) {
+                catch (IOException ignored) {
                 }
             }
         }
@@ -134,6 +140,11 @@ final public class WSClient {
     }
 
     public InputStream post(String soapMsg) throws IOException {
+        // TODO: replace "password" with something else from the payload so its never logged.
+        // <password>password</password>
+        // There may be others too with guest operations. See VimStub and docs around that
+        // for param names of guest passwords.
+        log.log(Level.FINEST, String.format("Sending payload to remote server. Payload: %s", soapMsg));
         HttpURLConnection postCon = (HttpURLConnection) baseUrl.openConnection();
 
         if (connectTimeout > 0) {
@@ -167,14 +178,17 @@ final public class WSClient {
         InputStream is;
 
         try {
+            log.log(Level.FINEST, "Retrieving response from server.");
             is = postCon.getInputStream();
         }
         catch (IOException ioe) {
+            log.log(Level.FINEST, "IOException caught. Getting error message from response.", ioe);
             is = postCon.getErrorStream();
         }
 
         if (cookie == null) {
             cookie = postCon.getHeaderField("Set-Cookie");
+            log.log(Level.FINEST, "Cookie was null. Resetting cookie value");
         }
         return is;
     }
@@ -200,6 +214,7 @@ final public class WSClient {
     }
 
     public void setVimNameSpace(String vimNameSpace) {
+        log.log(Level.FINEST, String.format("Setting vimNameSpace to: %s", vimNameSpace));
         this.vimNameSpace = vimNameSpace;
     }
 
@@ -230,6 +245,7 @@ final public class WSClient {
       "5.1"       vSphere 5.1
       ===============================================*/
     public void setSoapActionOnApiVersion(String apiVersion) {
+        log.log(Level.FINEST, String.format("Setting SOAP Action version to: %s", apiVersion));
         if ("4.0".equals(apiVersion)) {
             soapAction = SOAP_ACTION_V40;
         }
@@ -248,6 +264,7 @@ final public class WSClient {
         else { //always defaults to latest version
             soapAction = SOAP_ACTION_V55;
         }
+        log.log(Level.FINEST, String.format("Set SOAP Action version to: %s", soapAction));
     }
 
     private StringBuffer readStream(InputStream is) throws IOException {
